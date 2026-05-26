@@ -1,0 +1,185 @@
+# ════════════════════════════════════════════════════════════════════════
+# market_data_v2 — Docker Compose for Coolify
+# ════════════════════════════════════════════════════════════════════════
+# Three services:
+#
+#   ingest-daemon  → reads Cedro, populates engines, publishes to NATS,
+#                    writes snapshots to Redis, persists trades to Timescale.
+#                    NOT exposed externally. host network (latency-critical).
+#
+#   api-server     → HTTP /v1/* + WS /ws. Exposed via Traefik with a
+#                    subdomain managed by Coolify.
+#
+#   nats           → JetStream broker shared by ingest and api.
+#                    Exposed inside the docker network only.
+#
+# Redis and TimescaleDB are NOT in this compose — they run elsewhere and
+# the daemon connects via REDIS_URL / DATABASE_URL.
+#
+# To deploy via Coolify: point its compose loader at this file. Environment
+# vars come from the Coolify UI (Secrets); see .env.example for the full
+# list with descriptions.
+# ════════════════════════════════════════════════════════════════════════
+
+services:
+
+  # ─── Ingest daemon ──────────────────────────────────────────────────
+  ingest-daemon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ingest
+    image: market-data-v2/ingest-daemon:latest
+    container_name: market-data-ingest
+    restart: unless-stopped
+
+    # Latency-sensitive socket to Cedro — bypass docker NAT.
+    network_mode: host
+
+    # CPU pinning. Adjust to your host's isolated cores (ARCHITECTURE §11.5).
+    # Comment out on dev machines that don't have isolcpus configured.
+    # cpuset: "0-11"
+
+    cap_add:
+      - IPC_LOCK   # allow mlockall (ARCHITECTURE §11.5)
+
+    ulimits:
+      memlock: -1
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
+    environment:
+      # Observability
+      LOG_FILTER: ${LOG_FILTER:-info}
+      LOG_JSON: ${LOG_JSON:-1}
+      METRICS_BIND: 0.0.0.0:9100
+
+      # Cedro Crystal — REQUIRED
+      CEDRO_HOST: ${CEDRO_HOST}
+      CEDRO_PORT: ${CEDRO_PORT:-81}
+      CEDRO_USERNAME: ${CEDRO_USERNAME}
+      CEDRO_PASSWORD: ${CEDRO_PASSWORD}
+      CEDRO_SOFTWARE_KEY: ${CEDRO_SOFTWARE_KEY:-}
+
+      # Engine tuning
+      PARSER_WORKERS: ${PARSER_WORKERS:-8}
+      BOOK_SHARDS: ${BOOK_SHARDS:-8}
+      TRADE_BUFFER_PER_TICKER: ${TRADE_BUFFER_PER_TICKER:-100}
+
+      # Socket tuning — requires net.core.rmem_max on host >= SO_RCVBUF
+      SO_RCVBUF: ${SO_RCVBUF:-134217728}
+      FRAME_CHANNEL_CAPACITY: ${FRAME_CHANNEL_CAPACITY:-2097152}
+
+      # Fanout — NATS is on host (network_mode: host above)
+      NATS_URL: ${NATS_URL:-nats://127.0.0.1:4222}
+      REDIS_URL: ${REDIS_URL}
+      SNAPSHOT_TTL_SECONDS: ${SNAPSHOT_TTL_SECONDS:-}
+
+      # Raw archive
+      RAW_ARCHIVE_DIR: /var/data/raw
+      RAW_ZSTD_LEVEL: ${RAW_ZSTD_LEVEL:-3}
+
+      # Persistence
+      DATABASE_URL: ${DATABASE_URL}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-4}
+      WAL_PATH: /var/data/trades.wal
+      TRADE_BATCH_SIZE: ${TRADE_BATCH_SIZE:-5000}
+      TRADE_FLUSH_MS: ${TRADE_FLUSH_MS:-100}
+
+    volumes:
+      # Raw archive needs to survive container restarts.
+      - ingest-raw:/var/data/raw
+      # WAL must be on durable storage — perda zero depends on it.
+      - ingest-wal:/var/data
+
+    depends_on:
+      - nats
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:9100/metrics > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+    labels:
+      coolify.managed: "true"
+      coolify.type: "application"
+
+
+  # ─── API server (HTTP /v1/* + WS /ws) ───────────────────────────────
+  api-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    image: market-data-v2/api-server:latest
+    container_name: market-data-api
+    restart: unless-stopped
+
+    environment:
+      LOG_FILTER: ${LOG_FILTER:-info}
+      LOG_JSON: ${LOG_JSON:-1}
+      API_BIND: 0.0.0.0:8080
+      API_METRICS_BIND: 0.0.0.0:9101
+      API_TOKENS: ${API_TOKENS}
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-100}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-}
+      REDIS_URL: ${REDIS_URL}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+
+    expose:
+      - "8080"   # picked up by Coolify/Traefik
+      - "9101"   # Prometheus
+
+    depends_on:
+      - nats
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8080/v1/health > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+    # Coolify-managed Traefik routing. Set FQDN in Coolify UI; the labels
+    # below are picked up automatically. Override if running standalone.
+    labels:
+      coolify.managed: "true"
+      coolify.type: "application"
+      # Standalone Traefik example (uncomment outside Coolify):
+      # traefik.enable: "true"
+      # traefik.http.routers.market-api.rule: "Host(`api.example.com`)"
+      # traefik.http.routers.market-api.tls: "true"
+      # traefik.http.routers.market-api.tls.certresolver: "letsencrypt"
+      # traefik.http.services.market-api.loadbalancer.server.port: "8080"
+
+
+  # ─── NATS (JetStream) ──────────────────────────────────────────────
+  nats:
+    image: nats:2.10-alpine
+    container_name: market-data-nats
+    restart: unless-stopped
+    # Match ingest-daemon's network_mode so loopback NATS_URL works.
+    network_mode: host
+    command:
+      - "-c"
+      - "/etc/nats/nats.conf"
+    volumes:
+      - ./deploy/nats.conf:/etc/nats/nats.conf:ro
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8222/varz > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+
+volumes:
+  ingest-raw:
+    driver: local
+  ingest-wal:
+    driver: local
+  nats-data:
+    driver: local

@@ -10,6 +10,7 @@ members = [
     "crates/api-server",
     "crates/persistence",
     "bin/ingest-daemon",
+    "bin/api-server",
     # Other crates will be added as they are implemented:
     # "crates/market-engine",
     # "crates/persistence",

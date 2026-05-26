@@ -99,6 +99,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "api-server-bin"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "anyhow",
+ "api-server",
+ "axum",
+ "observability",
+ "tikv-jemallocator",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
