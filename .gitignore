@@ -1,0 +1,47 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Environment & secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Local config overrides
+config/local.toml
+config/*.local.toml
+
+# Runtime artifacts
+/var/
+*.wal
+/data/
+raw/
+
+# Logs
+*.log
+logs/
+
+# Profiling / flamegraphs
+flamegraph.svg
+perf.data*
+*.folded
+
+# Test outputs
+target-coverage/
+tarpaulin-report.*
+
+# Editor backups
+*~
+\#*\#
+.\#*

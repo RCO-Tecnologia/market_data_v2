@@ -1,0 +1,47 @@
+[package]
+name = "persistence"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Trade persistence: WAL + batch INSERT into the existing TimescaleDB `trades` hypertable."
+
+[dependencies]
+cedro-protocol = { path = "../cedro-protocol" }
+
+sqlx = { workspace = true, features = ["rust_decimal"] }
+rust_decimal = { version = "1.36", features = ["db-postgres"] }
+tokio.workspace = true
+ahash.workspace = true
+dashmap.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+metrics.workspace = true
+
+[dev-dependencies]
+tempfile = "3.14"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+needless_pass_by_value = "allow"
+significant_drop_tightening = "allow"
+doc_markdown = "allow"
+collapsible_if = "allow"

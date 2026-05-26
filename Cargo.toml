@@ -1,0 +1,133 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/cedro-protocol",
+    "crates/cedro-client",
+    "crates/market-engine",
+    "crates/raw-archive",
+    "crates/observability",
+    "crates/fanout",
+    "crates/api-server",
+    "crates/persistence",
+    "bin/ingest-daemon",
+    # Other crates will be added as they are implemented:
+    # "crates/market-engine",
+    # "crates/persistence",
+    # "crates/raw-archive",
+    # "crates/fanout",
+    # "crates/api-server",
+    # "crates/observability",
+    # "bin/ingest-daemon",
+    # "bin/api-server",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.93"
+license = "Proprietary"
+authors = ["market_data_v2 team"]
+repository = "https://github.com/<org>/market_data_v2"
+
+# Shared dependency versions — every crate references via `<dep>.workspace = true`.
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.43", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+
+# Bytes & SIMD-aware text scanning
+bytes = "1.10"
+memchr = "2.7"
+
+# Parsing
+nom = "8.0"
+
+# Channels
+crossbeam-channel = "0.5"
+
+# Concurrent data structures + fast hashing
+dashmap = { version = "6.1", features = ["rayon"] }
+ahash = "0.8"
+foldhash = "0.1"
+
+# Allocator (used by binaries via #[global_allocator])
+tikv-jemallocator = "0.6"
+
+# Persistence
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "macros", "chrono", "uuid"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+
+# NATS
+async-nats = "0.38"
+
+# HTTP / WS
+axum = { version = "0.8", features = ["ws", "macros"] }
+tokio-tungstenite = "0.26"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip", "limit"] }
+hyper = "1.5"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rmp-serde = "1.3"
+
+# Compression
+zstd = "0.13"
+
+# System / pinning
+socket2 = { version = "0.5", features = ["all"] }
+core_affinity = "0.8"
+libc = "0.2"
+
+# Time & ids
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+metrics = "0.24"
+metrics-exporter-prometheus = "0.16"
+
+# Errors
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Config
+figment = { version = "0.10", features = ["toml", "env"] }
+
+# Dev / testing
+proptest = "1.6"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Compile every dependency with -O3 even in dev so that running
+# tests doesn't take forever on large protocol fixtures.
+[profile.dev.package."*"]
+opt-level = 3
+
+# Release profile is tuned for maximum throughput.
+# This trades ~3x slower builds for ~10-20% runtime improvement.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+debug = false
+overflow-checks = false
+
+# Separate profile for benchmarks: same as release but keep debug symbols
+# so flamegraphs / perf are readable.
+[profile.bench]
+inherits = "release"
+debug = true
+strip = "none"
+
+# Profile for stress / load tests where we want production-ish perf but
+# still want assertions and overflow checks active.
+[profile.production-debug]
+inherits = "release"
+debug = true
+strip = "none"
+overflow-checks = true
+debug-assertions = true

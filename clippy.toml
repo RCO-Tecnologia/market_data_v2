@@ -1,0 +1,19 @@
+# Block macros that are too heavy for the hot path (see ARCHITECTURE.md §5.8).
+# Modules that opt out can `#[allow(clippy::disallowed_macros)]` locally,
+# but doing so requires explicit justification in code review.
+disallowed-macros = [
+    # Hot-path safety: avoid eager formatting / lock contention on the global subscriber.
+    { path = "tracing::trace", reason = "ARCHITECTURE.md §5.8: no logs in hot path. Use metrics::counter!/gauge!/histogram! instead." },
+    { path = "tracing::debug", reason = "ARCHITECTURE.md §5.8: no logs in hot path. Use metrics::counter!/gauge!/histogram! instead." },
+    { path = "log::trace",    reason = "Use the `tracing` ecosystem; avoid `log` macros entirely." },
+    { path = "log::debug",    reason = "Use the `tracing` ecosystem; avoid `log` macros entirely." },
+    { path = "log::info",     reason = "Use the `tracing` ecosystem; avoid `log` macros entirely." },
+    { path = "log::warn",     reason = "Use the `tracing` ecosystem; avoid `log` macros entirely." },
+    { path = "log::error",    reason = "Use the `tracing` ecosystem; avoid `log` macros entirely." },
+]
+
+# Thresholds tuned for an embedded-systems-grade codebase.
+too-many-arguments-threshold = 8
+type-complexity-threshold = 250
+single-char-binding-names-threshold = 4
+cognitive-complexity-threshold = 30

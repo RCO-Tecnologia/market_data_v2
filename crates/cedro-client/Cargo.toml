@@ -1,0 +1,55 @@
+[package]
+name = "cedro-client"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "TCP transport, handshake, blocking reader thread, and command emission for the Cedro Crystal feed."
+
+[dependencies]
+cedro-protocol = { path = "../cedro-protocol" }
+
+bytes.workspace = true
+memchr.workspace = true
+crossbeam-channel.workspace = true
+socket2.workspace = true
+core_affinity.workspace = true
+libc.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+metrics.workspace = true
+
+[dev-dependencies]
+# Spin up a real TCP listener in tests so we exercise the actual socket path.
+# `std::net` is enough — no async required.
+
+[lints.rust]
+unsafe_code = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+# The metrics::gauge!.set() API takes f64, and we feed usize sizes into it
+# (kernel buffer, threshold). At our scales the lossy cast is harmless.
+cast_precision_loss = "allow"
+# `Option::map_or_else` reads worse than `match` for two-arm cases that
+# split into `format!()` calls — readability wins over the lint here.
+option_if_let_else = "allow"
+# Single-arm matches that destructure are clearer in tests; this lint
+# fights with the AAA test style.
+single_match = "allow"
+collapsible_if = "allow"
+# Reader/watchdog thread closures take owned Arc clones — `&Arc<...>` would
+# require the closure to capture by reference, defeating the move semantics.
+needless_pass_by_value = "allow"
